@@ -10,6 +10,7 @@ import boto3
 import redis.asyncio as redis
 from botocore.config import Config
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 # Logging configuration
@@ -69,6 +70,15 @@ async def lifespan(app: FastAPI):
         logger.info("Redis connection closed")
 
 app = FastAPI(title="Product API", lifespan=lifespan)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class Product(BaseModel):
     category: str
