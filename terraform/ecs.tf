@@ -1,4 +1,3 @@
-# ECS Cluster
 resource "aws_ecs_cluster" "main" {
   name = "${var.project_name}-cluster"
 
@@ -8,7 +7,7 @@ resource "aws_ecs_cluster" "main" {
   }
 }
 
-# IAM Role for ECS Task Execution
+# IAM Roles for ECS
 resource "aws_iam_role" "ecs_task_execution_role" {
   name = "${var.project_name}-task-exec-role"
 
@@ -31,7 +30,6 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution_role_policy" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
-# IAM Role for ECS Task
 resource "aws_iam_role" "ecs_task_role" {
   name = "${var.project_name}-task-role"
 
@@ -49,8 +47,9 @@ resource "aws_iam_role" "ecs_task_role" {
   })
 }
 
-resource "aws_iam_role_policy" "ecs_task_role_policy" {
-  name = "${var.project_name}-task-role-policy"
+# DynamoDB Access for Task Role
+resource "aws_iam_role_policy" "dynamodb_access" {
+  name = "${var.project_name}-dynamodb-access"
   role = aws_iam_role.ecs_task_role.id
 
   policy = jsonencode({
@@ -58,17 +57,15 @@ resource "aws_iam_role_policy" "ecs_task_role_policy" {
     Statement = [
       {
         Action = [
-          "dynamodb:GetItem",
           "dynamodb:PutItem",
+          "dynamodb:GetItem",
           "dynamodb:UpdateItem",
           "dynamodb:DeleteItem",
           "dynamodb:Query",
-          "dynamodb:Scan",
-          "dynamodb:BatchGetItem",
-          "dynamodb:BatchWriteItem"
+          "dynamodb:Scan"
         ]
         Effect   = "Allow"
-        Resource = [aws_dynamodb_table.products.arn]
+        Resource = [aws_dynamodb_table.products.arn, "${aws_dynamodb_table.products.arn}/index/*"]
       }
     ]
   })
@@ -115,7 +112,7 @@ resource "aws_security_group" "ecs_tasks" {
   }
 }
 
-# ALB
+# Load Balancer
 resource "aws_lb" "main" {
   name               = "${var.project_name}-alb"
   internal           = false
@@ -152,13 +149,14 @@ resource "aws_lb_listener" "http" {
   }
 }
 
-# CloudWatch Log Group
+# CloudWatch Log Group - NO TAGS (bypass SCP restriction)
 resource "aws_cloudwatch_log_group" "ecs" {
   name              = "/ecs/${var.project_name}/product-api"
   retention_in_days = 14
+  # Tags removed to avoid logs:TagResource block
 }
 
-# ECS Task Definition
+# Task Definition
 resource "aws_ecs_task_definition" "main" {
   family                   = "${var.project_name}-task"
   network_mode             = "awsvpc"
@@ -186,7 +184,7 @@ resource "aws_ecs_task_definition" "main" {
         }
       ]
       environment = [
-        { name = "DYNAMODB_TABLE_NAME", value = aws_dynamodb_table.products.name },
+        { name = "DYNAMODB_TABLE_NAME", value = aws_dynamodb_table.products.id },
         { name = "REDIS_HOST", value = aws_elasticache_replication_group.main.primary_endpoint_address },
         { name = "AWS_REGION", value = var.aws_region },
         { name = "REDIS_PASSWORD", value = local.redis_auth_token }
@@ -203,7 +201,7 @@ resource "aws_ecs_task_definition" "main" {
   ])
 }
 
-# ECS Service
+# Service
 resource "aws_ecs_service" "main" {
   name                               = "${var.project_name}-service"
   cluster                            = aws_ecs_cluster.main.id

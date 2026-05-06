@@ -5,10 +5,6 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
-    random = {
-      source  = "hashicorp/random"
-      version = "~> 3.0"
-    }
   }
 }
 
@@ -17,15 +13,14 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Project     = var.project_name
-      Environment = var.environment
+      Project   = var.project_name
+      Environment = "dev"
       ManagedBy   = "terraform"
     }
   }
 }
 
+data "aws_caller_identity" "current" {}
 data "aws_availability_zones" "available" {
   state = "available"
 }
-
-data "aws_caller_identity" "current" {}

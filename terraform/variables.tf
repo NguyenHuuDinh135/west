@@ -1,7 +1,7 @@
 variable "aws_region" {
   description = "AWS region"
   type        = string
-  default     = "ap-southeast-1"
+  default     = "us-east-1"
 }
 
 variable "project_name" {
@@ -10,32 +10,20 @@ variable "project_name" {
   default     = "west"
 }
 
-variable "environment" {
-  description = "Environment name"
-  type        = string
-  default     = "dev"
-}
-
 variable "vpc_cidr" {
-  description = "VPC CIDR block"
+  description = "VPC CIDR"
   type        = string
   default     = "10.20.0.0/16"
 }
 
-variable "redis_node_type" {
-  description = "Redis node type"
-  type        = string
-  default     = "cache.t4g.micro"
-}
-
 variable "ecs_task_cpu" {
-  description = "ECS task CPU"
-  type        = number
-  default     = 256
+  description = "ECS Task CPU"
+  type        = string
+  default     = "256"
 }
 
 variable "ecs_task_memory" {
-  description = "ECS task memory"
-  type        = number
-  default     = 512
+  description = "ECS Task Memory"
+  type        = string
+  default     = "512"
 }

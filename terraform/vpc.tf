@@ -1,4 +1,3 @@
-# VPC
 resource "aws_vpc" "main" {
   cidr_block           = var.vpc_cidr
   enable_dns_hostnames = true
@@ -9,7 +8,6 @@ resource "aws_vpc" "main" {
   }
 }
 
-# Subnets
 resource "aws_subnet" "public" {
   count                   = 2
   vpc_id                  = aws_vpc.main.id
@@ -33,7 +31,6 @@ resource "aws_subnet" "private" {
   }
 }
 
-# Internet Gateway
 resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
 
@@ -42,7 +39,6 @@ resource "aws_internet_gateway" "main" {
   }
 }
 
-# Route Tables
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
 
@@ -76,16 +72,17 @@ resource "aws_route_table_association" "private" {
   route_table_id = aws_route_table.private.id
 }
 
-# Gateway Endpoints (Free)
+# VPC Endpoints for S3 and DynamoDB (Gateway Type) to save cost
 resource "aws_vpc_endpoint" "s3" {
   vpc_id       = aws_vpc.main.id
   service_name = "com.amazonaws.${var.aws_region}.s3"
-  route_table_ids = [aws_route_table.private.id]
+  vpc_endpoint_type = "Gateway"
+  route_table_ids = [aws_route_table.private.id, aws_route_table.public.id]
 }
 
 resource "aws_vpc_endpoint" "dynamodb" {
   vpc_id       = aws_vpc.main.id
   service_name = "com.amazonaws.${var.aws_region}.dynamodb"
   vpc_endpoint_type = "Gateway"
-  route_table_ids = [aws_route_table.private.id]
+  route_table_ids = [aws_route_table.private.id, aws_route_table.public.id]
 }

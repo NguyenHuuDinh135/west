@@ -25,10 +25,10 @@ resource "aws_dynamodb_table" "products" {
   }
 
   global_secondary_index {
-    name               = "gsi1"
-    hash_key           = "gsi1pk"
-    range_key          = "gsi1sk"
-    projection_type    = "ALL"
+    name            = "gsi1"
+    hash_key        = "gsi1pk"
+    range_key       = "gsi1sk"
+    projection_type = "ALL"
   }
 
   point_in_time_recovery {
