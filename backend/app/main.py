@@ -123,6 +123,25 @@ async def _fetch_from_dynamodb(category: str, sku: str) -> Optional[Dict[str, An
 async def healthz():
     return {"status": "ok"}
 
+@app.get("/readyz")
+async def readyz():
+    """Check connectivity to downstream services."""
+    try:
+        # Check Redis
+        if redis_client:
+            await redis_client.ping()
+        else:
+            raise Exception("Redis client not initialized")
+        
+        # Check DynamoDB (simple describe table)
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, lambda: table.load())
+        
+        return {"status": "ready"}
+    except Exception as e:
+        logger.error(f"Ready check failed: {e}")
+        raise HTTPException(status_code=503, detail=str(e))
+
 @app.get("/products/{category}/{sku}")
 async def get_product(category: str, sku: str):
     key = get_cache_key(category, sku)
