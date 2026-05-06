@@ -41,15 +41,13 @@ jobs:
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
-        uses: docker/build-push-action@v5
-        with:
-          # Just initializing buildx
-          dry-run: true
+        uses: docker/setup-buildx-action@v3
 
       - name: Build and Push Docker Image
         uses: docker/build-push-action@v5
         with:
           context: ./backend
+          file: ./backend/Dockerfile
           platforms: linux/arm64
           push: true
           tags: ${{ steps.ecr_info.outputs.repo_url }}:latest
