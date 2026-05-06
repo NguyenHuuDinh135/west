@@ -1,80 +1,191 @@
-from fastapi import FastAPI, HTTPException, status
-from contextlib import asynccontextmanager
+import os
+import json
+import logging
 import asyncio
-from typing import Dict
-from .schemas import UserCreate, UserUpdate, UserInDB
-from .crud import db
-from .cache import cache
+from contextlib import asynccontextmanager
+from typing import Optional, Dict, Any
 
-# Singleflight protection
-_inflight_requests: Dict[str, asyncio.Future] = {}
+import boto3
+import redis.asyncio as redis
+from botocore.config import Config
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+
+# Logging configuration
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+logger = logging.getLogger("product-api")
+
+# Environment variables
+TABLE_NAME = os.environ.get("DYNAMODB_TABLE_NAME")
+REDIS_HOST = os.environ.get("REDIS_HOST")
+REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD")
+AWS_REGION = os.environ.get("AWS_REGION", "ap-southeast-1")
+CACHE_TTL = int(os.environ.get("CACHE_TTL_SECONDS", "300"))
+
+# AWS Clients
+boto_cfg = Config(
+    region_name=AWS_REGION,
+    retries={"max_attempts": 3, "mode": "adaptive"},
+    max_pool_connections=50,
+)
+
+# DynamoDB Resource
+dynamodb = boto3.resource("dynamodb", config=boto_cfg)
+table = dynamodb.Table(TABLE_NAME)
+
+# Redis client
+redis_client: Optional[redis.Redis] = None
+
+# Singleflight protection against cache stampede
+inflight: Dict[str, asyncio.Future] = {}
+inflight_lock = asyncio.Lock()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await cache.connect()
-    await db.connect()
+    global redis_client
+    logger.info(f"Connecting to Redis at {REDIS_HOST}")
+    redis_client = redis.Redis(
+        host=REDIS_HOST,
+        port=6379,
+        password=REDIS_PASSWORD,
+        ssl=True,
+        ssl_cert_reqs=None,
+        decode_responses=True,
+        socket_timeout=2,
+        socket_connect_timeout=2,
+        retry_on_timeout=True,
+    )
+    try:
+        await redis_client.ping()
+        logger.info("Successfully connected to Redis")
+    except Exception as e:
+        logger.error(f"Failed to connect to Redis: {e}")
+    
     yield
-    await db.close()
-    await cache.close()
+    
+    if redis_client:
+        await redis_client.aclose()
+        logger.info("Redis connection closed")
 
-app = FastAPI(title="User Profile API", lifespan=lifespan)
+app = FastAPI(title="Product API", lifespan=lifespan)
+
+class Product(BaseModel):
+    category: str
+    sku: str
+    name: str
+    price: float
+    stock: int
+
+def get_cache_key(category: str, sku: str) -> str:
+    return f"product:{category}:{sku}"
+
+async def _fetch_from_dynamodb(category: str, sku: str) -> Optional[Dict[str, Any]]:
+    """Helper to fetch from DynamoDB using Lab Guide schema (pk/sk)."""
+    try:
+        # Lab schema: pk=PRODUCT#category, sk=SKU#sku
+        pk = f"PRODUCT#{category}"
+        sk = f"SKU#{sku}"
+        
+        # We run this in a thread to keep FastAPI async loop free
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(
+            None, 
+            lambda: table.get_item(Key={"pk": pk, "sk": sk})
+        )
+        
+        item = response.get("Item")
+        if not item:
+            return None
+            
+        return {
+            "category": category,
+            "sku": sku,
+            "name": item.get("name"),
+            "price": float(item.get("price", 0)),
+            "stock": int(item.get("stock", 0))
+        }
+    except Exception as e:
+        logger.error(f"DynamoDB fetch error: {e}")
+        return None
 
 @app.get("/healthz")
-async def health_check():
-    return {"status": "healthy"}
+async def healthz():
+    return {"status": "ok"}
 
-@app.post("/users", response_model=UserInDB, status_code=status.HTTP_201_CREATED)
-async def create_user(user: UserCreate):
-    existing = await db.get_user(user.user_id)
-    if existing:
-        raise HTTPException(status_code=400, detail="User already exists")
+@app.get("/products/{category}/{sku}")
+async def get_product(category: str, sku: str):
+    key = get_cache_key(category, sku)
     
-    new_user = await db.create_user(user)
-    return new_user
-
-@app.get("/users/{user_id}", response_model=UserInDB)
-async def get_user(user_id: str):
-    # Cache-aside with singleflight
-    user = await cache.get_user(user_id)
-    if user:
-        return user
-
-    if user_id in _inflight_requests:
-        return await _inflight_requests[user_id]
-
-    future = asyncio.Future()
-    _inflight_requests[user_id] = future
-    
+    # 1. Try Cache
     try:
-        user = await db.get_user(user_id)
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
+        cached_data = await redis_client.get(key)
+        if cached_data:
+            logger.info(f"Cache HIT for {key}")
+            return {"source": "cache", **json.loads(cached_data)}
+    except Exception as e:
+        logger.warning(f"Cache lookup failed: {e}")
+
+    # 2. Cache MISS - Use Singleflight to prevent stampede
+    async with inflight_lock:
+        if key in inflight:
+            # Wait for the existing request to finish
+            future = inflight[key]
+        else:
+            # This is the first request, create a future and start fetching
+            future = asyncio.get_event_loop().create_future()
+            inflight[key] = future
+            asyncio.create_task(resolve_miss(category, sku, key, future))
+
+    result = await future
+    if not result:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    return {"source": "dynamodb", **result}
+
+async def resolve_miss(category: str, sku: str, key: str, future: asyncio.Future):
+    """Worker function to fetch from DB and update cache."""
+    try:
+        logger.info(f"Cache MISS for {key}, fetching from DynamoDB")
+        item = await _fetch_from_dynamodb(category, sku)
         
-        await cache.set_user(user_id, user)
-        future.set_result(user)
-        return user
+        if item:
+            # Update cache
+            try:
+                await redis_client.setex(key, CACHE_TTL, json.dumps(item))
+            except Exception as e:
+                logger.error(f"Failed to update cache: {e}")
+        
+        future.set_result(item)
     except Exception as e:
         future.set_exception(e)
-        raise e
     finally:
-        _inflight_requests.pop(user_id, None)
+        async with inflight_lock:
+            inflight.pop(key, None)
 
-@app.patch("/users/{user_id}", response_model=UserInDB)
-async def update_user(user_id: str, user_update: UserUpdate):
-    user = await db.get_user(user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    updated_user = await db.update_user(user_id, user_update)
-    await cache.delete_user(user_id)
-    return updated_user
-
-@app.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_user(user_id: str):
-    user = await db.get_user(user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    await db.delete_user(user_id)
-    await cache.delete_user(user_id)
-    return None
+@app.put("/products/{category}/{sku}")
+async def upsert_product(category: str, sku: str, product: Product):
+    """Update or create a product and invalidate cache."""
+    try:
+        pk = f"PRODUCT#{category}"
+        sk = f"SKU#{sku}"
+        
+        item = {
+            "pk": pk,
+            "sk": sk,
+            "name": product.name,
+            "price": product.price,
+            "stock": product.stock,
+            "gsi1pk": "STATUS#active",
+            "gsi1sk": f"PRICE#{int(product.price):010d}"
+        }
+        
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, lambda: table.put_item(Item=item))
+        
+        # Invalidate Cache (Cache-aside)
+        await redis_client.delete(get_cache_key(category, sku))
+        
+        return {"status": "success", "message": "Product updated and cache invalidated"}
+    except Exception as e:
+        logger.error(f"Failed to upsert product: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

@@ -87,7 +87,7 @@ resource "aws_iam_role_policy" "ecs_task_role_policy" {
           "dynamodb:BatchWriteItem"
         ]
         Effect   = "Allow"
-        Resource = [aws_dynamodb_table.user_profiles.arn]
+        Resource = [aws_dynamodb_table.products.arn]
       },
       {
         Action = [
@@ -104,7 +104,7 @@ resource "aws_iam_role_policy" "ecs_task_role_policy" {
 resource "aws_security_group" "alb" {
   name        = "${var.project_name}-alb-sg"
   description = "Allow HTTP inbound traffic"
-  vpc_id      = aws_vpc.main.id
+  vpc_id      = data.aws_vpc.selected.id
 
   ingress {
     from_port   = 80
@@ -128,7 +128,7 @@ resource "aws_security_group" "alb" {
 resource "aws_security_group" "ecs_tasks" {
   name        = "${var.project_name}-ecs-tasks-sg"
   description = "Allow inbound traffic from ALB"
-  vpc_id      = aws_vpc.main.id
+  vpc_id      = data.aws_vpc.selected.id
 
   ingress {
     from_port       = 8000
@@ -155,7 +155,7 @@ resource "aws_lb" "main" {
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
-  subnets            = aws_subnet.public[*].id
+  subnets            = local.public_subnets
 
   tags = {
     Name = "${var.project_name}-alb"
@@ -166,7 +166,7 @@ resource "aws_lb_target_group" "main" {
   name        = "${var.project_name}-tg"
   port        = 8000
   protocol    = "HTTP"
-  vpc_id      = aws_vpc.main.id
+  vpc_id      = data.aws_vpc.selected.id
   target_type = "ip"
 
   health_check {
@@ -224,7 +224,7 @@ resource "aws_ecs_task_definition" "main" {
         }
       ]
       environment = [
-        { name = "DYNAMODB_TABLE_NAME", value = aws_dynamodb_table.user_profiles.name },
+        { name = "DYNAMODB_TABLE_NAME", value = aws_dynamodb_table.products.name },
         { name = "REDIS_HOST", value = aws_elasticache_replication_group.main.primary_endpoint_address },
         { name = "AWS_REGION", value = var.aws_region }
       ]
@@ -258,7 +258,7 @@ resource "aws_ecs_service" "main" {
 
   network_configuration {
     security_groups  = [aws_security_group.ecs_tasks.id]
-    subnets          = aws_subnet.private[*].id
+    subnets          = local.private_subnets
     assign_public_ip = false
   }
 

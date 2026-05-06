@@ -1,7 +1,7 @@
 resource "aws_security_group" "redis" {
   name        = "${var.project_name}-redis-sg"
   description = "Allow Redis traffic from ECS tasks"
-  vpc_id      = aws_vpc.main.id
+  vpc_id      = data.aws_vpc.selected.id
 
   ingress {
     from_port       = 6379
@@ -24,7 +24,7 @@ resource "aws_security_group" "redis" {
 
 resource "aws_elasticache_subnet_group" "main" {
   name       = "${var.project_name}-redis-subnet-group"
-  subnet_ids = aws_subnet.private[*].id
+  subnet_ids = local.private_subnets
 }
 
 resource "random_password" "redis_auth" {

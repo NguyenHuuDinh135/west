@@ -1,3 +1,21 @@
+variable "vpc_id" {
+  description = "The ID of the existing VPC"
+  type        = string
+  default     = "" # Leave empty to use default VPC or let user fill
+}
+
+variable "public_subnet_ids" {
+  description = "List of public subnet IDs"
+  type        = list(string)
+  default     = []
+}
+
+variable "private_subnet_ids" {
+  description = "List of private subnet IDs"
+  type        = list(string)
+  default     = []
+}
+
 variable "aws_region" {
   description = "AWS region"
   type        = string
