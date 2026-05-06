@@ -25,7 +25,7 @@ variable "aws_region" {
 variable "project_name" {
   description = "Project name"
   type        = string
-  default     = "ddb-cache-lab"
+  default     = "west"
 }
 
 variable "environment" {

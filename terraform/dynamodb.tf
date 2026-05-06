@@ -38,8 +38,4 @@ resource "aws_dynamodb_table" "products" {
   server_side_encryption {
     enabled = true
   }
-
-  tags = {
-    Name = "${var.project_name}-products"
-  }
 }

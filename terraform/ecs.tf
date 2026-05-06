@@ -81,10 +81,6 @@ resource "aws_lb" "main" {
   load_balancer_type = "application"
   security_groups    = [local.default_sg_id] # Using default SG due to SCP restriction
   subnets            = local.public_subnets
-
-  tags = {
-    Name = "${var.project_name}-alb"
-  }
 }
 
 resource "aws_lb_target_group" "main" {

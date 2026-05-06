@@ -14,14 +14,7 @@ terraform {
 
 provider "aws" {
   region = var.aws_region
-
-  default_tags {
-    tags = {
-      Project     = var.project_name
-      Environment = var.environment
-      ManagedBy   = "terraform"
-    }
-  }
+  # Removed default_tags to avoid logs:TagResource and SCP tagging blocks
 }
 
 data "aws_availability_zones" "available" {}
