@@ -8,7 +8,3 @@ resource "aws_ecr_repository" "app" {
 
   force_delete = true # For easier lab cleanup
 }
-
-output "ecr_repository_url" {
-  value = aws_ecr_repository.app.repository_url
-}
