@@ -2,6 +2,7 @@ import os
 import json
 import logging
 import asyncio
+from decimal import Decimal
 from contextlib import asynccontextmanager
 from typing import Optional, Dict, Any
 
@@ -173,7 +174,7 @@ async def upsert_product(category: str, sku: str, product: Product):
             "pk": pk,
             "sk": sk,
             "name": product.name,
-            "price": product.price,
+            "price": Decimal(str(product.price)),
             "stock": product.stock,
             "gsi1pk": "STATUS#active",
             "gsi1sk": f"PRICE#{int(product.price):010d}"
