@@ -1,10 +1,16 @@
-# Use existing VPC if ID is provided, otherwise fetch the default VPC
+# Use existing VPC
 data "aws_vpc" "selected" {
   id      = var.vpc_id != "" ? var.vpc_id : null
   default = var.vpc_id == "" ? true : null
 }
 
-# Fetch subnets belonging to the selected VPC
+# Fetch the DEFAULT security group of the VPC
+data "aws_security_group" "default" {
+  vpc_id = data.aws_vpc.selected.id
+  name   = "default"
+}
+
+# Fetch subnets
 data "aws_subnets" "all" {
   filter {
     name   = "vpc-id"
@@ -12,17 +18,14 @@ data "aws_subnets" "all" {
   }
 }
 
-# Fetch route tables for the VPC (needed for existing Gateway Endpoints if any)
 data "aws_route_tables" "selected" {
   vpc_id = data.aws_vpc.selected.id
 }
 
-# For the lab, we'll use the subnets provided or auto-select from existing ones
 locals {
   public_subnets  = length(var.public_subnet_ids) > 0 ? var.public_subnet_ids : [data.aws_subnets.all.ids[0]]
   private_subnets = length(var.private_subnet_ids) > 0 ? var.private_subnet_ids : slice(data.aws_subnets.all.ids, 0, min(2, length(data.aws_subnets.all.ids)))
+  
+  # Use the existing default security group since CreateSecurityGroup is blocked
+  default_sg_id   = data.aws_security_group.default.id
 }
-
-# Note: VPC Endpoints (S3, DDB, ECR, etc.) are removed here because 
-# the SCP policy blocks their creation. We assume the environment 
-# either has them or has a NAT Gateway configured.

@@ -3,30 +3,6 @@ locals {
   redis_auth_token = "LabPassword12345!" 
 }
 
-resource "aws_security_group" "redis" {
-  name        = "${var.project_name}-redis-sg"
-  description = "Allow Redis traffic from ECS tasks"
-  vpc_id      = data.aws_vpc.selected.id
-
-  ingress {
-    from_port       = 6379
-    to_port         = 6379
-    protocol        = "tcp"
-    security_groups = [aws_security_group.ecs_tasks.id]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "${var.project_name}-redis-sg"
-  }
-}
-
 resource "aws_elasticache_subnet_group" "main" {
   name       = "${var.project_name}-redis-subnet-group"
   subnet_ids = local.private_subnets
@@ -40,7 +16,7 @@ resource "aws_elasticache_replication_group" "main" {
   parameter_group_name       = "default.redis7"
   port                       = 6379
   subnet_group_name          = aws_elasticache_subnet_group.main.name
-  security_group_ids         = [aws_security_group.redis.id]
+  security_group_ids         = [local.default_sg_id] # Using default SG due to SCP restriction
   automatic_failover_enabled = true
   multi_az_enabled           = true
   transit_encryption_enabled = true
