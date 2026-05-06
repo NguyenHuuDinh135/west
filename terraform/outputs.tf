@@ -1,5 +1,5 @@
 output "vpc_id" {
-  value = local.vpc_id
+  value = aws_vpc.main.id
 }
 
 output "alb_dns_name" {
@@ -24,8 +24,4 @@ output "redis_endpoint" {
 
 output "ecr_repository_url" {
   value = aws_ecr_repository.app.repository_url
-}
-
-output "github_actions_role_arn" {
-  value = data.aws_iam_role.github_actions.arn
 }
