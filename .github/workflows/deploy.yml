@@ -31,12 +31,6 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Get ECR Repository URL
-        id: ecr_info
-        run: |
-          REPO_URL=$(aws ecr describe-repositories --repository-names ${PROJECT_NAME}-app --query 'repositories[0].repositoryUrl' --output text)
-          echo "repo_url=$REPO_URL" >> $GITHUB_OUTPUT
-
       - name: Set up QEMU (for ARM64 build)
         uses: docker/setup-qemu-action@v3
 
@@ -50,7 +44,7 @@ jobs:
           file: ./backend/Dockerfile
           platforms: linux/arm64
           push: true
-          tags: ${{ steps.ecr_info.outputs.repo_url }}:latest
+          tags: ${{ steps.login-ecr.outputs.registry }}/${{ env.PROJECT_NAME }}-app:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
