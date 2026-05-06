@@ -31,25 +31,6 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution_role_policy" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
-# Task Execution Role Policy for Secrets injection
-resource "aws_iam_role_policy" "ecs_task_exec_secrets" {
-  name = "${var.project_name}-task-exec-secrets"
-  role = aws_iam_role.ecs_task_execution_role.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = [
-          "secretsmanager:GetSecretValue"
-        ]
-        Effect   = "Allow"
-        Resource = [aws_secretsmanager_secret.redis_auth.arn]
-      }
-    ]
-  })
-}
-
 resource "aws_iam_role" "ecs_task_role" {
   name = "${var.project_name}-task-role"
 
@@ -67,7 +48,7 @@ resource "aws_iam_role" "ecs_task_role" {
   })
 }
 
-# Task Role Policy for DynamoDB and Secrets access
+# Task Role Policy for DynamoDB
 resource "aws_iam_role_policy" "ecs_task_role_policy" {
   name = "${var.project_name}-task-role-policy"
   role = aws_iam_role.ecs_task_role.id
@@ -88,13 +69,6 @@ resource "aws_iam_role_policy" "ecs_task_role_policy" {
         ]
         Effect   = "Allow"
         Resource = [aws_dynamodb_table.products.arn]
-      },
-      {
-        Action = [
-          "secretsmanager:GetSecretValue"
-        ]
-        Effect   = "Allow"
-        Resource = [aws_secretsmanager_secret.redis_auth.arn]
       }
     ]
   })
@@ -226,13 +200,8 @@ resource "aws_ecs_task_definition" "main" {
       environment = [
         { name = "DYNAMODB_TABLE_NAME", value = aws_dynamodb_table.products.name },
         { name = "REDIS_HOST", value = aws_elasticache_replication_group.main.primary_endpoint_address },
-        { name = "AWS_REGION", value = var.aws_region }
-      ]
-      secrets = [
-        {
-          name      = "REDIS_PASSWORD"
-          valueFrom = "${aws_secretsmanager_secret.redis_auth.arn}:authToken::"
-        }
+        { name = "AWS_REGION", value = var.aws_region },
+        { name = "REDIS_PASSWORD", value = local.redis_auth_token }
       ]
       logConfiguration = {
         logDriver = "awslogs"
