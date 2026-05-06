@@ -1,5 +1,5 @@
 output "vpc_id" {
-  value = data.aws_vpc.selected.id
+  value = local.vpc_id
 }
 
 output "alb_dns_name" {

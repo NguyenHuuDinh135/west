@@ -1,19 +1,19 @@
 variable "vpc_id" {
   description = "The ID of the existing VPC"
   type        = string
-  default     = "" # Leave empty to use default VPC or let user fill
+  default     = "vpc-0a361d79aba3475a9"
 }
 
 variable "public_subnet_ids" {
   description = "List of public subnet IDs"
   type        = list(string)
-  default     = []
+  default     = ["subnet-0fbc6db30678a9f3e"]
 }
 
 variable "private_subnet_ids" {
   description = "List of private subnet IDs"
   type        = list(string)
-  default     = []
+  default     = ["subnet-038faea4f7bed6477", "subnet-0fbc6db30678a9f3e"]
 }
 
 variable "aws_region" {

@@ -17,4 +17,4 @@ provider "aws" {
   # Removed default_tags to avoid logs:TagResource and SCP tagging blocks
 }
 
-data "aws_availability_zones" "available" {}
+data "aws_caller_identity" "current" {}
