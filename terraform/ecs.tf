@@ -8,7 +8,9 @@ resource "aws_ecs_cluster" "main" {
   }
 }
 
-# Fetch existing IAM Roles to avoid EntityAlreadyExists errors in restricted environments
+# Fetch existing IAM Roles
+# In Learner Labs, roles are often pre-created or persist between runs.
+# Using 'data' avoids 'EntityAlreadyExists' and 'AccessDenied' on CreateRole.
 data "aws_iam_role" "ecs_task_execution_role" {
   name = "${var.project_name}-task-exec-role"
 }
@@ -17,7 +19,9 @@ data "aws_iam_role" "ecs_task_role" {
   name = "${var.project_name}-task-role"
 }
 
-# Task Role Policy for DynamoDB (We still try to attach/create this)
+# Task Role Policy for DynamoDB
+# We try to create/attach this, but if it fails due to IAM restrictions, 
+# you might need to use a pre-existing policy like 'AmazonDynamoDBFullAccess'.
 resource "aws_iam_role_policy" "ecs_task_role_policy" {
   name = "${var.project_name}-task-role-policy"
   role = data.aws_iam_role.ecs_task_role.name
@@ -48,7 +52,7 @@ resource "aws_lb" "main" {
   name               = "${var.project_name}-alb"
   internal           = false
   load_balancer_type = "application"
-  security_groups    = [local.default_sg_id] # Using default SG due to SCP restriction
+  security_groups    = [local.default_sg_id]
   subnets            = local.public_subnets
 }
 
@@ -142,7 +146,7 @@ resource "aws_ecs_service" "main" {
   deployment_minimum_healthy_percent = 100
 
   network_configuration {
-    security_groups  = [local.default_sg_id] # Using default SG due to SCP restriction
+    security_groups  = [local.default_sg_id]
     subnets          = local.private_subnets
     assign_public_ip = false
   }
